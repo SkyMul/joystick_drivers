@@ -78,6 +78,7 @@ private:
   int ff_fd_;
   struct ff_effect joy_effect_;
   bool update_feedback_;
+  const bool CONTINUOUS_PUBLICATION = true;
 
   diagnostic_updater::Updater diagnostic_;
 
@@ -467,10 +468,19 @@ public:
 
       bool tv_set = false;
       bool publication_pending = false;
-      tv.tv_sec = 1;
+      tv.tv_sec = 0.8; //1;
       tv.tv_usec = 0;
       sensor_msgs::Joy joy_msg;  // Here because we want to reset it on device close.
       double val;  // Temporary variable to hold event values
+
+      std::cout << "sticky_buttons_: " << sticky_buttons_ << std::endl;
+      // __u8 
+      int last_event_type = -1;
+      // __s16
+      double last_event_val = 0.0f;
+      int last_event_num = 2;
+      // ros::Rate rosloop(100);
+      
       while (nh_.ok())
       {
         ros::spinOnce();
@@ -512,11 +522,15 @@ public:
         {
           if (read(joy_fd, &event, sizeof(js_event)) == -1 && errno != EAGAIN)
           {
+            std::cout << "Breaking because joystick was disconnected " << std::endl;
             break;  // Joystick is probably closed. Definitely occurs.
           }
 
           joy_msg.header.stamp = ros::Time().now();
           event_count_++;
+          last_event_type = static_cast<unsigned int>(event.type);
+          // std::cout << "Received event: " << last_event_type << ", event.number=" << static_cast<unsigned int>(event.number) << ", event.value=" << event.value << std::endl;
+
           switch (event.type)
           {
           case JS_EVENT_BUTTON:
@@ -552,6 +566,7 @@ public:
               publish_soon = true;
             }
             break;
+            
           case JS_EVENT_AXIS:
           case JS_EVENT_AXIS | JS_EVENT_INIT:
             val = event.value;
@@ -579,6 +594,9 @@ public:
               {
                 val = 0;
               }
+
+              last_event_val = val;
+              last_event_num = event.number;
               joy_msg.axes[event.number] = val * scale;
               // Will wait a bit before sending to try to combine events.
               publish_soon = true;
@@ -589,6 +607,7 @@ public:
               if (!(event.type & JS_EVENT_INIT))
               {
                 val = event.value;
+
                 if (val > unscaled_deadzone)
                 {
                   val -= unscaled_deadzone;
@@ -603,7 +622,9 @@ public:
                 }
                 joy_msg.axes[event.number] = val * scale;
               }
-
+              
+              last_event_val = val;
+              last_event_num = event.number;
               publish_soon = true;
               break;
             }
@@ -618,6 +639,20 @@ public:
           joy_msg.header.stamp = ros::Time().now();
           publish_now = true;
         }
+
+        // Continuous publication
+        if (CONTINUOUS_PUBLICATION && last_event_type == 2 && (last_event_num == 0 || last_event_num == 1 || last_event_num == 3 || last_event_num == 4))
+          if (!publish_soon && !publish_now)
+          {
+            // std::cout << "publish_soon = false && publish_now = false, last event val is " << last_event_val << std::endl;
+            if (last_event_val != 0)
+            {
+              val = last_event_val;
+              // tv_set = true;
+              publish_now = true;
+              // std::cout << "Setting publish_now = true, last event val is " << last_event_val << std::endl;
+            }
+          }
 
         if (publish_now)
         {
@@ -655,11 +690,12 @@ public:
 
         if (!tv_set)
         {
-          tv.tv_sec = 1;
+          tv.tv_sec = 0.8; //1;
           tv.tv_usec = 0;
         }
 
         diagnostic_.update();
+        // rosloop.sleep();
       }  // End of joystick open loop.
 
       close(ff_fd_);
@@ -684,3 +720,54 @@ int main(int argc, char **argv)
   Joystick j;
   return j.main(argc, argv);
 }
+
+// #include <SDL2/SDL.h>
+
+// int main(int argc, char **argv) {
+//   ros::init(argc, argv, "joy_node");
+//     if (SDL_Init(SDL_INIT_JOYSTICK) < 0) {
+//         std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
+//         return 1;
+//     }
+
+//     // Open joystick
+//     SDL_Joystick* joystick = SDL_JoystickOpen(0);
+//     if (!joystick) {
+//         std::cerr << "Failed to open joystick: " << SDL_GetError() << std::endl;
+//         return 1;
+//     }
+
+//     bool inRange = true; // Assuming the joystick is initially in range
+
+//     // Main loop
+//     while (true) {
+//         // Poll joystick events
+//         SDL_Event event;
+//         while (SDL_PollEvent(&event)) {
+//             if (event.type == SDL_JOYDEVICEADDED) {
+//                 std::cout << "Joystick connected!" << std::endl;
+//             }
+//             else if (event.type == SDL_JOYDEVICEREMOVED) {
+//                 std::cout << "Joystick disconnected!" << std::endl;
+//                 inRange = false; // Joystick is out of range
+//             }
+//         }
+
+//         // Check connection status
+//         if (!SDL_JoystickGetAttached(joystick)) {
+//             std::cout << "Joystick disconnected!" << std::endl;
+//             inRange = false; // Joystick is out of range
+//         }
+
+//         // Do other processing here...
+
+//         // Sleep for a short time before polling again
+//         // SDL_Delay(100);
+//         usleep(1000);
+//     }
+
+//     // Cleanup
+//     SDL_JoystickClose(joystick);
+//     SDL_Quit();
+//     return 0;
+// }

@@ -5,6 +5,9 @@ project(joy)
 set(CATKIN_DEPS roscpp diagnostic_updater sensor_msgs roslint)
 find_package(catkin REQUIRED ${CATKIN_DEPS})
 
+# find_package(SDL2 REQUIRED)
+# include_directories(${SDL2_INCLUDE_DIRS})
+
 roslint_cpp()
 
 catkin_package(DEPENDS sensor_msgs)
@@ -22,6 +25,7 @@ if(HAVE_LINUX_JOYSTICK_H)
   add_executable(joy_node src/joy_node.cpp)
   target_link_libraries(joy_node ${catkin_LIBRARIES})
 
+  # target_link_libraries(joy_node ${SDL2_LIBRARIES})
 # Install targets
   install(TARGETS joy_node
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

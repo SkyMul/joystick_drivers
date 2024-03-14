@@ -26,6 +26,7 @@
   
   <depend>diagnostic_updater</depend>
   <depend>joystick</depend>
+  <!-- <depend>libsdl-dev</depend> -->
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
 
